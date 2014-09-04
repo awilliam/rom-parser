@@ -82,7 +82,7 @@ next:
 
 	header = map + offset;
 
-	if (header->sig1 != 0x55 && header->sig2 != 0xaa) {
+	if (header->sig1 != 0x55 || header->sig2 != 0xaa) {
 		offset += 512;
 		goto next;
 	}
