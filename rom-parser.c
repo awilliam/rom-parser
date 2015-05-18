@@ -98,15 +98,56 @@ next:
 		goto out_unmap;
 	}
 
-	printf("\tPCIR: type %x, vendor: %04x, device: %04x, "
-	       "class: %02x%02x%02x\n", pcir->type, pcir->vendor, pcir->device,
+	printf("\tPCIR: type %x%s, vendor: %04x, device: %04x, "
+	       "class: %02x%02x%02x\n", pcir->type,
+	       pcir->type == 0 ? " (x86 PC-AT)" : pcir->type == 3 ?
+	       " (EFI)" : "",pcir->vendor, pcir->device,
 	       pcir->class[2], pcir->class[1], pcir->class[0]);
 	printf("\tPCIR: revision %x, vendor revision: %x\n",
 	       pcir->pcir_rev, pcir->rom_rev);
 
 	if (pcir->type == 3) {
-		printf("\t\tEFI: Signature %sValid\n",
-		       header->header_sig != 0x0ef1 ? "NOT " : "");
+		int valid = header->header_sig == 0x0ef1;
+		printf("\t\tEFI: Signature %sValid",
+		       !valid ? "NOT " : "");
+		if (valid) {
+			printf(", Subsystem: ");
+			switch (header->efi_subsys) {
+			case 0xb:
+				printf("Boot");
+				break;
+			case 0xc:
+				printf("Runtime");
+				break;
+			default:
+				printf("Unknown (%x)", header->efi_subsys);
+			}
+			printf(", Machine: ");
+
+			switch (header->efi_machine) {
+			case 0x014c:
+				printf("IA-32");
+				break;
+			case 0x0200:
+				printf("Itanium");
+				break;
+			case 0x0EBC:
+				printf("EFI Byte Code");
+				break;
+			case 0x8664:
+				printf("X64");
+				break;
+			case 0x01c2:
+				printf("ARM");
+				break;
+			case 0xaa64:
+				printf("ARM 64-bit");
+				break;
+			default:
+				printf("Unknown (%x)", header->efi_machine);
+			}
+		}
+		printf("\n");
 
 	}
 
