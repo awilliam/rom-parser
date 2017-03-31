@@ -5,6 +5,7 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <ctype.h>
 
 struct __attribute__ ((__packed__)) header {
 	unsigned char sig1;
@@ -44,10 +45,12 @@ int usage(char *name)
 int main(int argc, char **argv)
 {
 	struct stat st;
-	int fd, offset = 0, ret = 0;
+	int i, fd, offset = 0, ret = 0;
 	void *map;
 	struct header *header;
 	struct pcir *pcir;
+	char answer;
+	unsigned char csum, *data;
 
 	if (argc != 2)
 		return usage(argv[0]);
@@ -62,13 +65,13 @@ int main(int argc, char **argv)
 		return -1;
 	}
 
-	fd = open(argv[1], O_RDONLY);
+	fd = open(argv[1], O_RDWR);
 	if (fd < 0) {
 		printf("Unable to open ROM file: %m\n");
 		return -1;
 	}
 
-	map = mmap(NULL, st.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+	map = mmap(NULL, st.st_size, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
 	if (map == MAP_FAILED) {
 		printf("Unable to mmap ROM file: %m\n");
 		ret = -1;
@@ -103,7 +106,7 @@ next:
 	printf("\tPCIR: type %x%s, vendor: %04x, device: %04x, "
 	       "class: %02x%02x%02x\n", pcir->type,
 	       pcir->type == 0 ? " (x86 PC-AT)" : pcir->type == 3 ?
-	       " (EFI)" : "",pcir->vendor, pcir->device,
+	       " (EFI)" : "", pcir->vendor, pcir->device,
 	       pcir->class[2], pcir->class[1], pcir->class[0]);
 	printf("\tPCIR: revision %x, vendor revision: %x\n",
 	       pcir->pcir_rev, pcir->rom_rev);
@@ -150,8 +153,67 @@ next:
 			}
 		}
 		printf("\n");
-
 	}
+
+#ifdef FIXER
+ask_vendor:
+	printf("\nModify vendor ID %04x? (y/n): ", pcir->vendor);
+	answer = getchar();
+	getchar();
+	switch (tolower(answer)) {
+	case 'n':
+		break;
+	case 'y':
+	{
+		unsigned short vendor;
+
+		printf("New vendor ID: ");
+		ret = scanf("%hx", &vendor);
+		getchar();
+		if (ret == 1) {
+			printf("Overwrite vendor ID with %04x? (y/n): ", vendor);
+			answer = getchar();
+			getchar();
+			if (tolower(answer) == 'y') {
+				pcir->vendor = vendor;
+				break;
+			}
+		}
+	}
+	default:
+		printf("Unrecognized response, try again\n");
+		goto ask_vendor;
+	}
+
+ask_device:
+	printf("Modify device ID %04x? (y/n): ", pcir->device);
+	answer = getchar();
+	getchar();
+	switch (tolower(answer)) {
+	case 'n':
+		break;
+	case 'y':
+	{
+		unsigned short device;
+
+		printf("New device ID: ");
+		ret = scanf("%hx", &device);
+		getchar();
+		if (ret == 1) {
+			printf("Overwrite device ID with %04x? (y/n): ", device);
+			answer = getchar();
+			getchar();
+			if (tolower(answer) == 'y') {
+				pcir->device = device;
+				break;
+			}
+		}
+	}
+	default:
+		printf("Unrecognized response, try again\n");
+		goto ask_device;
+	}
+#endif
 
 	if (!pcir->last) {
 		offset += 512;
@@ -159,6 +221,30 @@ next:
 	}
 
 	printf("\tLast image\n");
+
+#ifdef FIXER
+	data = map;
+	for (csum = 0, i = 0; i < st.st_size; i++)
+		csum += data[i];
+
+	if (csum) {
+ask_csum:
+		printf("ROM checksum is invalid, fix? (y/n): ");
+		answer = getchar();
+		getchar();
+		switch (tolower(answer)) {
+		case 'n':
+			break;
+		case 'y':
+			data[6] = -(csum - data[6]);
+			break;
+		default:
+			printf("Unrecognized response, try again\n");
+			goto ask_csum;
+		}
+	} else
+		printf("ROM checksum OK\n");
+#endif
 
 out_unmap:
 	munmap(map, st.st_size);
