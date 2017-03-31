@@ -23,3 +23,5 @@ To modify ROM conents:
 usage: rom-fixer [ROM file]
 
 Obtain ROM as above, program prompts for modifying ROM vendor and device IDs and invalid checksums.
+
+IMPORTANT: rom-fixer will update the ROM file in place.  Make a backup!
